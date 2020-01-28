@@ -1,8 +1,10 @@
+from django.core.mail import EmailMessage, send_mail, BadHeaderError
 from django.views import generic
 from django.shortcuts import render, get_object_or_404, redirect
 from django.core.exceptions import ObjectDoesNotExist
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.template.loader import get_template
 
 import stripe
 
@@ -138,6 +140,12 @@ def cart_detail(request, total=0, counter=0, cart_items = None):
 
                     #print message when order is completed
                     print('the order has been created')
+                try:
+                    # calling the send email function
+                    sendEmail(order_details.id)
+                    print('The order email has been sent to the customer')
+                except IOError as e:
+                    return e
 
                 return redirect('store:thanks', pk=order_details.id)
 
@@ -192,3 +200,23 @@ class OrderDetail(LoginRequiredMixin, generic.DetailView):
         context = super().get_context_data(**kwargs)
         context['order_items'] = OrderItem.objects.filter(order=self.kwargs['pk'])
         return context
+
+def sendEmail(order_id):
+    transaction = Order.objects.get(id=order_id)
+    order_items = OrderItem.objects.filter(order=transaction)
+    try:
+        #Sending the order to the customer
+        mail_sub = f"J's store - New Order #{transaction.id}"
+        to_email = [f'{transaction.emailAddress}']
+        from_email = settings.DEFAULT_FROM_EMAIL
+        order_information = {
+        'transaction': transaction,
+        'order_items': order_items
+        }
+        order_message = get_template('email/email.html').render(order_information)
+        msg = EmailMessage(mail_sub, order_message, to=to_email, from_email=from_email)
+        msg.content_subtype = 'html'
+        msg.send()
+        # send_mail(mail_sub, order_message, from_email, to_email, fail_silently=True)
+    except IOError as e:
+        return e
